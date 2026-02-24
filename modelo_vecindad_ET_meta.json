@@ -1,0 +1,15 @@
+{
+  "model": "ET",
+  "cell_size": 400,
+  "radii": [
+    1,
+    2
+  ],
+  "neighbor_shapes": [
+    "3x3",
+    "5x5"
+  ],
+  "block_size_meters": 2000,
+  "min_target_share": 0.002,
+  "valid_target_classes_used": [
+    
