@@ -1,5 +1,5 @@
 {
-  "model": "ET",
+  "model": "XGB",
   "cell_size": 400,
   "radii": [
     1,

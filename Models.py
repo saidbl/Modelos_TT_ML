@@ -8,6 +8,8 @@ from sklearn.utils.class_weight import compute_class_weight
 from collections import Counter
 import joblib
 import json
+from lightgbm import LGBMClassifier
+from xgboost import XGBClassifier
 
 DATASET_PATH = "dataset.csv"
 
@@ -177,7 +179,33 @@ def evaluate_model_cv(model_ctor, X, y, groups, splitter):
         out["top2_mean"] = float(np.mean(top2_scores))
         out["top3_mean"] = float(np.mean(top3_scores))
     return out
+def lgbm_ctor():
+    return LGBMClassifier(
+        n_estimators=800,
+        learning_rate=0.05,
+        num_leaves=31,
+        min_data_in_leaf=20,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        objective="multiclass",
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        verbosity=-1  
+    )
 
+def xgb_ctor():
+    return XGBClassifier(
+        n_estimators=1500,
+        learning_rate=0.05,
+        max_depth=8,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        objective="multi:softprob",
+        eval_metric="mlogloss",
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        tree_method="hist"
+    )
 def main():
     df = pd.read_csv(DATASET_PATH)
     for col in ["lat", "lon", "actividad_id"]:
@@ -195,6 +223,10 @@ def main():
         block_size_meters=BLOCK_SIZE_METERS,
         min_target_share=MIN_TARGET_SHARE
     )
+    from sklearn.preprocessing import LabelEncoder
+
+    le = LabelEncoder()
+    y = le.fit_transform(y)
 
     print("=====================================")
     print(f"CELL_SIZE={CELL_SIZE} | RADII={RADII} | CV blocks={BLOCK_SIZE_METERS}m")
@@ -231,39 +263,64 @@ def main():
 
     print("\n===== Evaluando ExtraTrees =====")
     et_res = evaluate_model_cv(et_ctor, X, y, groups, splitter)
-    best_name, best_ctor, best_res = ("RF", rf_ctor, rf_res) if rf_res["macro_f1_mean"] >= et_res["macro_f1_mean"] else ("ET", et_ctor, et_res)
 
+    print("\n===== Evaluando LightGBM =====")
+    lgbm_res = evaluate_model_cv(lgbm_ctor, X, y, groups, splitter)
+
+    print("\n===== Evaluando XGBoost =====")
+    xgb_res = evaluate_model_cv(xgb_ctor, X, y, groups, splitter)
+
+    all_models = {
+        "RF": (rf_ctor, rf_res),
+        "ET": (et_ctor, et_res),
+        "LGBM": (lgbm_ctor, lgbm_res),
+        "XGB": (xgb_ctor, xgb_res),
+    }
+
+    sorted_models = sorted(
+        all_models.items(),
+        key=lambda x: x[1][1]["macro_f1_mean"],
+        reverse=True
+    )
+
+    top2 = sorted_models[:2]
     print("\n===== RESUMEN FINAL =====")
-    print("RF:", rf_res)
-    print("ET:", et_res)
-    print(f"MEJOR: {best_name}  MacroF1={best_res['macro_f1_mean']:.4f}  BalAcc={best_res['bal_acc_mean']:.4f}"
-          + (f"  Top2={best_res.get('top2_mean', None)}  Top3={best_res.get('top3_mean', None)}" if "top2_mean" in best_res else ""))
+
+    for name, (_, res) in sorted_models:
+        print(f"{name}: {res}")
+
+    print("\n TOP 2 MODELOS:")
+    for name, (_, res) in top2:
+        print(f"{name}  MacroF1={res['macro_f1_mean']:.4f}  BalAcc={res['bal_acc_mean']:.4f}")
+
     classes_present = np.unique(y)
     cw = compute_class_weight(class_weight="balanced", classes=classes_present, y=y)
     cw_map = {c: w for c, w in zip(classes_present, cw)}
     sample_weight = np.array([cw_map[yy] for yy in y], dtype=float)
 
-    final_model = best_ctor()
-    final_model.fit(X, y, sample_weight=sample_weight)
+    for name, (ctor, res) in top2:
+        final_model = ctor()
+        final_model.fit(X, y, sample_weight=sample_weight)
 
-    joblib.dump(final_model, f"modelo_vecindad_{best_name}.pkl")
+        joblib.dump(final_model, f"modelo_vecindad_{name}.pkl")
+        joblib.dump(le, f"modelo_vecindad_{name}_labelencoder.pkl")
 
-    meta = {
-        "model": best_name,
-        "cell_size": CELL_SIZE,
-        "radii": RADII,
-        "neighbor_shapes": [f"{2*r+1}x{2*r+1}" for r in RADII],
-        "block_size_meters": BLOCK_SIZE_METERS,
-        "min_target_share": MIN_TARGET_SHARE,
-        "valid_target_classes_used": sorted(list(set(y))),
-        "cv_results": best_res,
-        "splitter": splitter_name
-    }
-    with open(f"modelo_vecindad_{best_name}_meta.json", "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
+        meta = {
+            "model": name,
+            "cell_size": CELL_SIZE,
+            "radii": RADII,
+            "neighbor_shapes": [f"{2*r+1}x{2*r+1}" for r in RADII],
+            "block_size_meters": BLOCK_SIZE_METERS,
+            "min_target_share": MIN_TARGET_SHARE,
+            "valid_target_classes_used": sorted(list(set(y))),
+            "cv_results": res,
+            "splitter": splitter_name
+        }
 
-    print(f"\n Guardado: modelo_vecindad_{best_name}.pkl")
-    print(f" Guardado: modelo_vecindad_{best_name}_meta.json")
+        with open(f"modelo_vecindad_{name}_meta.json", "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+        print(f"\n Guardado modelo_vecindad_{name}.pkl")
 
 
 if __name__ == "__main__":
