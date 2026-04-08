@@ -11,6 +11,7 @@ EXPECTED_CLASSES = list(range(1, 21))
 
 MODEL_FILES = {
     "XGB": ("modelo_vecindad_XGB.pkl", "modelo_vecindad_XGB_labelencoder.pkl"),
+    "ET": ("modelo_vecindad_ET.pkl","modelo_vecindad_ET_labelencoder.pkl")
 }
 
 TRANSFORMER = Transformer.from_crs("EPSG:4326", "EPSG:32614", always_xy=True)
@@ -143,7 +144,7 @@ def main():
         (19.436100, -99.071900),  
         (19.347000, -99.062000),  
         (19.257000, -99.105000),
-        (19.420400, -99.181900),
+        (19.4842, -99.2077),
     ]
 
     for lat, lon in test_coords:

@@ -14,12 +14,12 @@ from xgboost import XGBClassifier
 DATASET_PATH = "dataset.csv"
 
 EXPECTED_CLASSES = list(range(1, 21)) 
-CELL_SIZE = 400                       
+CELL_SIZE = 300                       
 RADII = [1, 2]                         
 N_SPLITS = 4
 
 BLOCK_SIZE_METERS = 2000              
-MIN_TARGET_SHARE = 0.002              
+MIN_TARGET_SHARE = 0.01           
 
 RANDOM_STATE = 42
 
@@ -307,13 +307,13 @@ def main():
 
         meta = {
             "model": name,
-            "cell_size": CELL_SIZE,
-            "radii": RADII,
-            "neighbor_shapes": [f"{2*r+1}x{2*r+1}" for r in RADII],
-            "block_size_meters": BLOCK_SIZE_METERS,
-            "min_target_share": MIN_TARGET_SHARE,
-            "valid_target_classes_used": sorted(list(set(y))),
-            "cv_results": res,
+            "cell_size": int(CELL_SIZE),
+            "radii": [int(r) for r in RADII],
+            "neighbor_shapes": [f"{2*int(r)+1}x{2*int(r)+1}" for r in RADII],
+            "block_size_meters": int(BLOCK_SIZE_METERS),
+            "min_target_share": float(MIN_TARGET_SHARE),
+            "valid_target_classes_used": [int(v) for v in sorted(list(set(y)))],
+            "cv_results": {k: float(v) for k, v in res.items()},
             "splitter": splitter_name
         }
 
